@@ -1,0 +1,19 @@
+{
+    "id": "6b5085da-72e1-474a-927d-0993ca27e022",
+    "version": "0.0.1",
+    "requiredApiVersion": "^1.19.0",
+    "iconFile": "icon.png",
+    "author": {
+        "name": "Debdut Chakraborty",
+        "homepage": "na",
+        "support": "na"
+    },
+    "name": "Slow Mode",
+    "nameSlug": "slow-mode",
+    "classFile": "SlowModeApp.ts",
+    "description": "Implement slow mode in chats",
+    "implements": [
+        "IPostMessageSent",
+        "IPreMessageSentPrevent"
+    ]
+}
