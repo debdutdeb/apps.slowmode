@@ -12,7 +12,11 @@ import {
 } from '@rocket.chat/apps-engine/definition/accessors';
 import { ApiSecurity, ApiVisibility } from '@rocket.chat/apps-engine/definition/api';
 import { App } from '@rocket.chat/apps-engine/definition/App';
-import { IMessage, IPostMessageSent, IPreMessageSentPrevent } from '@rocket.chat/apps-engine/definition/messages';
+import {
+    IMessage,
+    IPostMessageSent,
+    IPreMessageSentPrevent,
+} from '@rocket.chat/apps-engine/definition/messages';
 import { IAppInfo } from '@rocket.chat/apps-engine/definition/metadata';
 import { IRoom } from '@rocket.chat/apps-engine/definition/rooms';
 import { ISetting } from '@rocket.chat/apps-engine/definition/settings';
@@ -39,23 +43,39 @@ export class SlowModeApp extends App implements IPostMessageSent, IPreMessageSen
         super(info, logger, accessors);
     }
 
-    public async onEnable(environment: IEnvironmentRead, configurationModify: IConfigurationModify): Promise<boolean> {
+    public async onEnable(
+        environment: IEnvironmentRead,
+        configurationModify: IConfigurationModify,
+    ): Promise<boolean> {
         // use rocket.cat? feels more "integrated"
         this.me =
             (await this.getAccessors().reader.getUserReader().getById('rocket.cat')) ??
             ((await this.getAccessors().reader.getUserReader().getAppUser(this.getID())) as IUser);
-        this.slowedFor = parseInt(await environment.getSettings().getValueById(settings.Duration.id), 10);
+        this.slowedFor = parseInt(
+            await environment.getSettings().getValueById(settings.Duration.id),
+            10,
+        );
         this.siteurl = (await environment.getServerSettings().getValueById('Site_Url')) as string;
         this.secret = genSecret();
         return Boolean(this.me);
     }
 
-    public async onSettingUpdated(setting: ISetting, configurationModify: IConfigurationModify, read: IRead, http: IHttp): Promise<void> {
+    public async onSettingUpdated(
+        setting: ISetting,
+        configurationModify: IConfigurationModify,
+        read: IRead,
+        http: IHttp,
+    ): Promise<void> {
         this.slowedFor = setting.value;
     }
 
-    public async initialize(configurationExtend: IConfigurationExtend, environmentRead: IEnvironmentRead): Promise<void> {
-        await configurationExtend.slashCommands.provideSlashCommand(new SlowModeManageCommand(this));
+    public async initialize(
+        configurationExtend: IConfigurationExtend,
+        environmentRead: IEnvironmentRead,
+    ): Promise<void> {
+        await configurationExtend.slashCommands.provideSlashCommand(
+            new SlowModeManageCommand(this),
+        );
         await configurationExtend.settings.provideSetting(settings.Duration);
         await configurationExtend.api.provideApi({
             visibility: ApiVisibility.PRIVATE,
@@ -64,25 +84,39 @@ export class SlowModeApp extends App implements IPostMessageSent, IPreMessageSen
         });
     }
 
-    public async executePreMessageSentPrevent(message: IMessage, read: IRead, http: IHttp, persistence: IPersistence): Promise<boolean> {
+    public async executePreMessageSentPrevent(
+        message: IMessage,
+        read: IRead,
+        http: IHttp,
+        persistence: IPersistence,
+    ): Promise<boolean> {
         if (!Boolean(await SlowedRooms.findRoom(read.getPersistenceReader(), message.room))) {
             return false;
         }
-        const { createdAt } = (await LastMessage.findByUserAndRoom(read.getPersistenceReader(), message.sender, message.room)) ?? {};
+        const { createdAt } =
+            (await LastMessage.findByUserAndRoom(
+                read.getPersistenceReader(),
+                message.sender,
+                message.room,
+            )) ?? {};
         if (!createdAt) {
             return false;
         }
-        const timeLeft = this.slowedFor - (message.createdAt!.getTime() - createdAt.getTime()) / 1000;
+        const timeLeft =
+            this.slowedFor - (message.createdAt!.getTime() - createdAt.getTime()) / 1000;
         if (timeLeft >= 0) {
             // poc
             // this.events.set(message.sender.id, new Map<IRoom['id'], number>([[message.room.id, timeLeft]]));
             // super hacky and feels out of place
-            const endpoint = this.siteurl.replace(/\/$/, '') + this.getAccessors().providedApiEndpoints[0].computedPath;
+            const endpoint =
+                this.siteurl.replace(/\/$/, '') +
+                this.getAccessors().providedApiEndpoints[0].computedPath;
             await http.post(endpoint, {
                 data: {
                     roomId: message.room.id,
                     userId: message.sender.id,
                     timeLeft: Math.ceil(timeLeft),
+                    secret: this.secret,
                 },
             });
             return true;
