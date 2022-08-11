@@ -6,20 +6,20 @@ import {
     IEnvironmentRead,
     IHttp,
     ILogger,
-    IMessageBuilder,
     IModify,
     IPersistence,
     IRead,
 } from '@rocket.chat/apps-engine/definition/accessors';
 import { ApiSecurity, ApiVisibility } from '@rocket.chat/apps-engine/definition/api';
 import { App } from '@rocket.chat/apps-engine/definition/App';
-import { IMessage, IPostMessageSent, IPreMessageSentModify, IPreMessageSentPrevent } from '@rocket.chat/apps-engine/definition/messages';
+import { IMessage, IPostMessageSent, IPreMessageSentPrevent } from '@rocket.chat/apps-engine/definition/messages';
 import { IAppInfo } from '@rocket.chat/apps-engine/definition/metadata';
 import { IRoom } from '@rocket.chat/apps-engine/definition/rooms';
 import { ISetting } from '@rocket.chat/apps-engine/definition/settings';
 import { IUser } from '@rocket.chat/apps-engine/definition/users';
 import SlowModeManageCommand from './Command/EnableSlowMode';
 import { NotifySlowedState } from './Endpoints/NotifySlowedState';
+import { secret as genSecret } from './Lib/Functions';
 import { LastMessage } from './Models/LastMessage';
 import { SlowedRooms } from './Models/SlowedRooms';
 import { settings } from './Settings/setting';
@@ -33,14 +33,20 @@ export class SlowModeApp extends App implements IPostMessageSent, IPreMessageSen
 
     private siteurl: string;
 
+    public secret!: string;
+
     constructor(info: IAppInfo, logger: ILogger, accessors: IAppAccessors) {
         super(info, logger, accessors);
     }
 
     public async onEnable(environment: IEnvironmentRead, configurationModify: IConfigurationModify): Promise<boolean> {
-        this.me = (await this.getAccessors().reader.getUserReader().getAppUser(this.getID())) as IUser;
+        // use rocket.cat? feels more "integrated"
+        this.me =
+            (await this.getAccessors().reader.getUserReader().getById('rocket.cat')) ??
+            ((await this.getAccessors().reader.getUserReader().getAppUser(this.getID())) as IUser);
         this.slowedFor = parseInt(await environment.getSettings().getValueById(settings.Duration.id), 10);
         this.siteurl = (await environment.getServerSettings().getValueById('Site_Url')) as string;
+        this.secret = genSecret();
         return Boolean(this.me);
     }
 
@@ -52,7 +58,7 @@ export class SlowModeApp extends App implements IPostMessageSent, IPreMessageSen
         await configurationExtend.slashCommands.provideSlashCommand(new SlowModeManageCommand(this));
         await configurationExtend.settings.provideSetting(settings.Duration);
         await configurationExtend.api.provideApi({
-            visibility: ApiVisibility.PUBLIC,
+            visibility: ApiVisibility.PRIVATE,
             security: ApiSecurity.UNSECURE,
             endpoints: [new NotifySlowedState(this)],
         });
@@ -70,9 +76,6 @@ export class SlowModeApp extends App implements IPostMessageSent, IPreMessageSen
         if (timeLeft >= 0) {
             // poc
             // this.events.set(message.sender.id, new Map<IRoom['id'], number>([[message.room.id, timeLeft]]));
-            console.log(
-                `${message.sender.username} must wait ${timeLeft} seconds before being able to send another message in ${message.room.displayName}`,
-            );
             // super hacky and feels out of place
             const endpoint = this.siteurl.replace(/\/$/, '') + this.getAccessors().providedApiEndpoints[0].computedPath;
             await http.post(endpoint, {
@@ -100,15 +103,15 @@ export class SlowModeApp extends App implements IPostMessageSent, IPreMessageSen
         persistence: IPersistence,
         modify: IModify,
     ): Promise<void> {
-        const timeLeft = this.events.get(message.sender.id)?.get(message.room.id);
-        if (timeLeft) {
-            this.events.delete(message.sender.id);
-            return modify.getNotifier().notifyUser(message.sender, {
-                sender: this.me,
-                text: `Slow mode enabled, please wait another ${timeLeft} seconds`,
-                room: message.room,
-            });
-        }
+        // const timeLeft = this.events.get(message.sender.id)?.get(message.room.id);
+        // if (timeLeft) {
+        //     this.events.delete(message.sender.id);
+        //     return modify.getNotifier().notifyUser(message.sender, {
+        //         sender: this.me,
+        //         text: `Slow mode enabled, please wait another ${timeLeft} seconds`,
+        //         room: message.room,
+        //     });
+        // }
 
         await LastMessage.insertOrUpdate(persistence, message);
     }

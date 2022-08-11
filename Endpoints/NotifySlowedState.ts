@@ -1,5 +1,17 @@
-import { HttpStatusCode, IHttp, IModify, IPersistence, IRead } from '@rocket.chat/apps-engine/definition/accessors';
-import { ApiEndpoint, IApiEndpointInfo, IApiRequest, IApiResponse } from '@rocket.chat/apps-engine/definition/api';
+import {
+    HttpStatusCode,
+    IHttp,
+    IModify,
+    IPersistence,
+    IRead,
+} from '@rocket.chat/apps-engine/definition/accessors';
+import {
+    ApiEndpoint,
+    IApiEndpointInfo,
+    IApiRequest,
+    IApiResponse,
+} from '@rocket.chat/apps-engine/definition/api';
+import { notifyUser } from '../Lib/Functions';
 import { SlowModeApp } from '../SlowModeApp';
 
 /**
@@ -14,13 +26,17 @@ export class NotifySlowedState extends ApiEndpoint {
 
     public async post(
         request: IApiRequest,
-        endpoint: IApiEndpointInfo,
+        _endpoint: IApiEndpointInfo,
         read: IRead,
         modify: IModify,
-        http: IHttp,
-        persis: IPersistence,
+        _http: IHttp,
+        _persis: IPersistence,
     ): Promise<IApiResponse> {
-        const { roomId, userId, timeLeft } = request.content;
+        const { roomId, userId, timeLeft, secret } = request.content;
+        if (this.app.secret !== secret) {
+            // just a safeguard
+            return this.success({ status: HttpStatusCode.FORBIDDEN });
+        }
         const room = await read.getRoomReader().getById(roomId);
         if (!room) {
             console.log('invalid room id', roomId);
@@ -36,11 +52,16 @@ export class NotifySlowedState extends ApiEndpoint {
             });
         }
 
-        await modify.getNotifier().notifyRoom(room, {
-            sender: this.app.me,
+        await notifyUser({
+            modify,
+            user,
             room,
-            text: `Slow mode enabled, please wait ${timeLeft} seconds before sending another message`,
+            sender: this.app.me,
+            message: `Slow mode is enabled for this room, you must wait ${timeLeft} more second${
+                timeLeft > 1 ? 's' : ''
+            } before sending another message`,
         });
+
         return this.success();
     }
 }

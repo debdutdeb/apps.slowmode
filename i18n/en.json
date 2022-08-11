@@ -1,0 +1,4 @@
+{
+  "slowmode_description": "Enable Slow mode in public or private rooms",
+  "slowmode_params": "enable|disable [list] list all enabled slowed rooms"
+}
