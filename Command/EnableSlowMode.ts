@@ -1,9 +1,10 @@
 import { IHttp, IModify, IPersistence, IRead } from '@rocket.chat/apps-engine/definition/accessors';
-import { RoomType } from '@rocket.chat/apps-engine/definition/rooms';
+import { IRoom, RoomType } from '@rocket.chat/apps-engine/definition/rooms';
 import {
     ISlashCommand,
     SlashCommandContext,
 } from '@rocket.chat/apps-engine/definition/slashcommands';
+import { IUser } from '@rocket.chat/apps-engine/definition/users';
 import { Command } from '../Enums/Command';
 import { Errors } from '../Enums/Errors';
 import { Messages } from '../Enums/Messages';
@@ -29,9 +30,11 @@ export default class SlowModeManageCommand implements ISlashCommand {
         const [argument] = context.getArguments();
         switch (argument) {
             case Command.Enable:
+                await this.checkPermsission(modify, context.getRoom(), context.getSender());
                 await this.enableSlowMode(context, read, modify, persis);
                 break;
             case Command.Disable:
+                await this.checkPermsission(modify, context.getRoom(), context.getSender());
                 await this.disableSlowMode(context, read, modify, persis);
                 break;
             case Command.List:
@@ -42,6 +45,18 @@ export default class SlowModeManageCommand implements ISlashCommand {
         return;
     }
 
+    private async checkPermsission(modify: IModify, room: IRoom, user: IUser): Promise<void> {
+        if (!user.roles.some((role) => ['admin', 'moderator'].includes(role))) {
+            return notifyUser({
+                modify,
+                user,
+                room,
+                sender: this.app.me,
+                message: Errors.MUST_BE_MODERATOR_OR_ADMIN,
+            });
+        }
+    }
+
     private async enableSlowMode(
         context: SlashCommandContext,
         read: IRead,
@@ -50,15 +65,6 @@ export default class SlowModeManageCommand implements ISlashCommand {
     ): Promise<void> {
         const contextRoom = context.getRoom();
         const sender = context.getSender();
-        if (!sender.roles.some((roles) => roles.includes('moderator'))) {
-            return notifyUser({
-                modify,
-                user: sender,
-                room: contextRoom,
-                sender: this.app.me,
-                message: Errors.MUST_BE_MODERATOR_OR_ADMIN,
-            });
-        }
         if (contextRoom.type === RoomType.DIRECT_MESSAGE) {
             return notifyUser({
                 modify,
@@ -118,8 +124,7 @@ export default class SlowModeManageCommand implements ISlashCommand {
             });
         }
 
-        const room = await SlowedRooms.findRoom(read.getPersistenceReader(), contextRoom);
-        if (!room) {
+        if (!(await SlowedRooms.findRoom(read.getPersistenceReader(), contextRoom))) {
             return notifyUser({
                 modify,
                 user: sender,

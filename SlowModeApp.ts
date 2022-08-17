@@ -45,7 +45,7 @@ export class SlowModeApp extends App implements IPostMessageSent, IPreMessageSen
 
     public async onEnable(
         environment: IEnvironmentRead,
-        configurationModify: IConfigurationModify,
+        _configurationModify: IConfigurationModify,
     ): Promise<boolean> {
         // use rocket.cat? feels more "integrated"
         this.me =
@@ -127,7 +127,7 @@ export class SlowModeApp extends App implements IPostMessageSent, IPreMessageSen
     public checkPostMessageSent(message: IMessage, read: IRead, http: IHttp): Promise<boolean> {
         // poc
         // override preMessageSent response
-        return Promise.resolve(true);
+        return Promise.resolve<boolean>(true);
     }
 
     public async executePostMessageSent(
